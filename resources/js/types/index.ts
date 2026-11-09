@@ -33,6 +33,14 @@ export interface User {
     name: string;
     email: string;
     avatar?: string;
+    role?: string;
+    first_name?: string | null;
+    middle_name?: string | null;
+    last_name?: string | null;
+    student_id_number?: string | null;
+    college?: string | null;
+    department?: string | null;
+    year_level?: string | null;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;

@@ -20,7 +20,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'role:'.User::ROLE_STUDENT])
-    ->get('student/dashboard', fn () => Inertia::render('dashboard'))
+    ->get('student/dashboard', fn () => Inertia::render('student/dashboard'))
     ->name('student.dashboard');
 
 Route::middleware(['auth', 'role:'.User::ROLE_PROCTOR])
