@@ -30,6 +30,17 @@ class PasswordResetTest extends TestCase
         Notification::assertSentTo($user, ResetPassword::class);
     }
 
+    public function test_reset_password_link_can_be_requested_with_a_student_id_number()
+    {
+        Notification::fake();
+
+        $user = User::factory()->create();
+
+        $this->post('/forgot-password', ['identifier' => $user->student_id_number]);
+
+        Notification::assertSentTo($user, ResetPassword::class);
+    }
+
     public function test_reset_password_screen_can_be_rendered()
     {
         Notification::fake();
