@@ -1,10 +1,13 @@
 import ExaminationStatusBadge from '@/components/student/examination-status-badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import StudentLayout from '@/layouts/student-layout';
 import { cn } from '@/lib/utils';
 import { type SharedData } from '@/types';
-import { type Announcement, type Examination } from '@/types/student';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { type Announcement, type Examination, type ExaminationStatus } from '@/types/student';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import {
     ArrowUpRight,
     Bell,
@@ -23,6 +26,17 @@ import {
     Video,
     type LucideIcon,
 } from 'lucide-react';
+import { useState } from 'react';
+
+interface JoinedExamination {
+    title: string;
+    subject: string;
+    section: string;
+    schedule: string;
+    status: ExaminationStatus;
+    status_label: string;
+    joined_at: string;
+}
 
 interface StudentDashboardProps {
     /**
@@ -210,6 +224,35 @@ export default function StudentDashboard({
     const { auth } = usePage<SharedData>().props;
     const user = auth.user;
 
+    const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+    const [joinedExamination, setJoinedExamination] = useState<JoinedExamination | null>(null);
+    const joinForm = useForm({ access_code: '' });
+
+    const closeJoinDialog = () => {
+        if (joinForm.processing) {
+            return;
+        }
+
+        setJoinDialogOpen(false);
+        joinForm.reset();
+        joinForm.clearErrors();
+    };
+
+    const submitJoin = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        joinForm.post(route('student.examinations.join'), {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                const flash = (page.props as { flash?: { joined_examination?: JoinedExamination | null } }).flash;
+
+                setJoinedExamination(flash?.joined_examination ?? null);
+                setJoinDialogOpen(false);
+                joinForm.reset();
+            },
+        });
+    };
+
     const upcoming = upcomingExams ?? [];
     const history = examHistory ?? [];
     const notices = announcements ?? [];
@@ -245,13 +288,12 @@ export default function StudentDashboard({
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Button
-                        asChild
+                        type="button"
+                        onClick={() => setJoinDialogOpen(true)}
                         className="h-11 w-full justify-center gap-2 rounded-lg bg-[#164f48] px-5 text-[13px] font-semibold text-white shadow-[0_14px_26px_-16px_rgba(6,47,44,0.9)] hover:bg-[#103f39] sm:w-auto"
                     >
-                        <a href="#active-examination">
-                            <PlayCircle aria-hidden="true" />
-                            Join Examination
-                        </a>
+                        <PlayCircle aria-hidden="true" />
+                        Join Examination
                     </Button>
                     <Button
                         asChild
@@ -265,6 +307,34 @@ export default function StudentDashboard({
                     </Button>
                 </div>
             </div>
+
+            {joinedExamination && (
+                <div
+                    role="status"
+                    className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#c9e6d6] bg-[#f0faf4] px-5 py-4 text-[#1d5c42] sm:flex-row sm:items-start sm:justify-between"
+                >
+                    <div className="flex gap-3">
+                        <CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold">Successfully joined the examination!</p>
+                            <p className="mt-1 text-sm font-medium text-[#2f6b53]">{joinedExamination.title}</p>
+                            <p className="mt-0.5 text-xs text-[#4f7f6b]">
+                                {[joinedExamination.subject, joinedExamination.section, joinedExamination.schedule].filter(Boolean).join(' · ')}
+                            </p>
+                            <p className="mt-1 text-[11px] text-[#5f8d78]">
+                                {joinedExamination.status_label} · Your proctor will confirm your physical attendance.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setJoinedExamination(null)}
+                        className="self-start rounded-lg px-2 py-1 text-xs font-semibold text-[#3d7a60] transition-colors hover:bg-[#e1f3e8] hover:text-[#1d5c42]"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
 
             <div className="mt-7 grid gap-4 sm:grid-cols-3">
                 <StatCard icon={CalendarClock} label="Upcoming exams" value={String(upcoming.length)} hint="Scheduled for you" />
@@ -606,6 +676,55 @@ export default function StudentDashboard({
                     </>
                 )}
             </Panel>
+            <Dialog
+                open={joinDialogOpen}
+                onOpenChange={(open) => {
+                    if (open) {
+                        setJoinDialogOpen(true);
+                    } else {
+                        closeJoinDialog();
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Join Examination</DialogTitle>
+                        <DialogDescription>Enter the 6-character examination access code provided by your proctor.</DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={submitJoin} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="access_code">Access code</Label>
+                            <Input
+                                id="access_code"
+                                name="access_code"
+                                value={joinForm.data.access_code}
+                                onChange={(event) => joinForm.setData('access_code', event.target.value.toUpperCase())}
+                                className="h-11 text-center text-lg font-semibold tracking-[0.4em] uppercase"
+                                placeholder="ABC123"
+                                maxLength={6}
+                                autoComplete="off"
+                                autoFocus
+                                aria-invalid={joinForm.errors.access_code ? true : undefined}
+                            />
+                            {joinForm.errors.access_code && (
+                                <p role="alert" className="text-xs font-medium text-[#b4453a]">
+                                    {joinForm.errors.access_code}
+                                </p>
+                            )}
+                        </div>
+
+                        <DialogFooter className="gap-2 pt-2">
+                            <Button type="button" variant="outline" onClick={closeJoinDialog} disabled={joinForm.processing}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={joinForm.processing} className="gap-2 bg-[#164f48] text-white hover:bg-[#103f39]">
+                                {joinForm.processing ? 'Joining…' : 'Join Examination'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </StudentLayout>
     );
 }

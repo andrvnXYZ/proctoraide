@@ -150,6 +150,59 @@ class RegistrationTest extends TestCase
         $this->assertSame(0, User::count());
     }
 
+    public function test_incomplete_email_addresses_cannot_register()
+    {
+        foreach (['asdasasss@gma', 'student@example', 'student example.com', 'student@@example.com'] as $invalidEmail) {
+            $response = $this->post('/register', $this->registrationPayload([
+                'email' => $invalidEmail,
+            ]));
+
+            $response->assertSessionHasErrors('email');
+        }
+
+        $this->assertGuest();
+        $this->assertSame(0, User::count());
+    }
+
+    public function test_weak_passwords_cannot_register()
+    {
+        $response = $this->post('/register', $this->registrationPayload([
+            'password' => '1234567i9',
+            'password_confirmation' => '1234567i9',
+        ]));
+
+        $response->assertSessionHasErrors('password');
+        $this->assertGuest();
+        $this->assertSame(0, User::count());
+    }
+
+    public function test_email_addresses_are_normalized_before_storage()
+    {
+        $response = $this->post('/register', $this->registrationPayload([
+            'email' => '  Juan.DelaCruz@Example.COM  ',
+        ]));
+
+        $response->assertRedirect(route('student.dashboard', absolute: false));
+
+        $this->assertNotNull(User::where('email', 'juan.delacruz@example.com')->first());
+    }
+
+    public function test_duplicate_email_addresses_are_detected_case_insensitively()
+    {
+        User::factory()->create([
+            'email' => 'juan.delacruz@example.com',
+            'student_id_number' => '2024-00009',
+        ]);
+
+        $response = $this->post('/register', $this->registrationPayload([
+            'student_id_number' => '2024-00002',
+            'email' => 'JUAN.DELACRUZ@EXAMPLE.COM',
+        ]));
+
+        $response->assertSessionHasErrors('email');
+        $this->assertSame(1, User::where('email', 'juan.delacruz@example.com')->count());
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>

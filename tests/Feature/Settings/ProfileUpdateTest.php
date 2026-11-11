@@ -96,4 +96,59 @@ class ProfileUpdateTest extends TestCase
 
         $this->assertNotNull($user->fresh());
     }
+
+    public function test_incomplete_email_addresses_are_rejected()
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/settings/profile')
+            ->patch('/settings/profile', [
+                'name' => 'Test User',
+                'email' => 'asdasasss@gma',
+            ]);
+
+        $response
+            ->assertSessionHasErrors('email')
+            ->assertRedirect('/settings/profile');
+
+        $this->assertNotSame('asdasasss@gma', $user->refresh()->email);
+    }
+
+    public function test_profile_updates_normalize_the_email_address()
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->patch('/settings/profile', [
+                'name' => 'Test User',
+                'email' => '  New.Address@Example.COM ',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('new.address@example.com', $user->refresh()->email);
+    }
+
+    public function test_profile_updates_cannot_change_privileged_fields()
+    {
+        $user = User::factory()->create();
+        $originalRole = $user->role;
+        $originalStudentId = $user->student_id_number;
+
+        $this->actingAs($user)
+            ->patch('/settings/profile', [
+                'name' => 'Test User',
+                'email' => $user->email,
+                'role' => User::ROLE_ADMIN,
+                'student_id_number' => 'HACKED-0001',
+                'email_verified_at' => now(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $user->refresh();
+
+        $this->assertSame($originalRole, $user->role);
+        $this->assertSame($originalStudentId, $user->student_id_number);
+    }
 }

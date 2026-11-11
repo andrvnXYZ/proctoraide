@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Auth;
 
 use App\Models\User;
+use App\Rules\ValidEmailAddress;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -92,6 +93,7 @@ class RegisterRequest extends FormRequest
                 'string',
                 'lowercase',
                 'email',
+                new ValidEmailAddress,
                 'max:255',
                 Rule::unique(User::class, 'email'),
             ],
@@ -115,6 +117,7 @@ class RegisterRequest extends FormRequest
     {
         return [
             'email.unique' => 'An account with this email address already exists.',
+            'email.email' => 'Enter a valid email address, for example name@example.com.',
             'student_id_number.unique' => 'An account with this student ID number already exists.',
             'role.in' => 'Only student and proctor accounts can be registered.',
             'terms_accepted.accepted' => 'You must accept the terms and conditions.',

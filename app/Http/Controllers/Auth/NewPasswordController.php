@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Rules\ValidEmailAddress;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,19 +31,24 @@ class NewPasswordController extends Controller
     /**
      * Handle an incoming new password request.
      *
-     * @throws \Illuminate\Validation\ValidationException
+     * @throws ValidationException
      */
     public function store(Request $request): RedirectResponse
     {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
+        }
+
         $request->validate([
-            'token' => 'required',
-            'email' => 'required|email',
+            'token' => ['required', 'string'],
+            'email' => ['required', 'string', 'email', new ValidEmailAddress],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
         // Here we will attempt to reset the user's password. If it is successful we
         // will update the password on an actual user model and persist it to the
         // database. Otherwise we will parse the error and return the response.
+        // A valid token is deleted by the broker, so a link cannot be reused.
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user) use ($request) {
@@ -62,8 +68,10 @@ class NewPasswordController extends Controller
             return to_route('login')->with('status', __($status));
         }
 
+        // Return one generic message for every failure (unknown account, expired
+        // token, already-used token) so the page reveals nothing about accounts.
         throw ValidationException::withMessages([
-            'email' => [__($status)],
+            'email' => ['This password reset link is invalid or has expired. Please request a new one.'],
         ]);
     }
 }

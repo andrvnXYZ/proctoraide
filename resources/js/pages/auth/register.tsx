@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
 import { cn } from '@/lib/utils';
+import { isValidEmail, normalizeEmail, passwordIssuesMessage, passwordRequirements } from '@/lib/validation';
 import { Head, useForm } from '@inertiajs/react';
-import { ArrowRight, ChevronDown, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 
 const yearLevels = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', 'Graduate'];
@@ -89,6 +90,7 @@ export default function Register() {
 
     const [showPassword, setShowPassword] = useState(false);
     const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
+    const [clientErrors, setClientErrors] = useState<{ email?: string; password?: string }>({});
 
     const today = new Date().toISOString().slice(0, 10);
 
@@ -96,15 +98,38 @@ export default function Register() {
     const passwordConfirmationError =
         errors.password_confirmation || (errors.password && /confirmation|match/i.test(errors.password) ? errors.password : undefined);
     const termsError = errors.terms_accepted ?? (errors as Partial<Record<string, string>>).terms_accepted_at;
+    const emailError = clientErrors.email ?? errors.email;
+    const displayedPasswordError = clientErrors.password ?? passwordError;
 
     const isStudent = data.role === 'student';
 
     transform((formData) => ({
         ...formData,
+        email: normalizeEmail(formData.email),
         middle_name: formData.middle_name.trim() || null,
         student_id_number: formData.role === 'student' ? formData.student_id_number : null,
         year_level: formData.role === 'student' ? formData.year_level : null,
     }));
+
+    const validateEmail = (): string | undefined => {
+        if (!data.email.trim()) {
+            return 'Enter your email address.';
+        }
+
+        if (!isValidEmail(data.email)) {
+            return 'Enter a complete email address, for example name@example.com.';
+        }
+
+        return undefined;
+    };
+
+    const validatePassword = (): string | undefined => {
+        if (!data.password) {
+            return 'Enter a password.';
+        }
+
+        return passwordIssuesMessage(data.password);
+    };
 
     const handleRoleChange = (role: AuthRole) => {
         setData('role', role);
@@ -118,6 +143,18 @@ export default function Register() {
         event.preventDefault();
 
         if (processing) {
+            return;
+        }
+
+        // Friendly client-side checks; the server validates the same rules.
+        const nextErrors = {
+            email: validateEmail(),
+            password: validatePassword(),
+        };
+
+        setClientErrors(nextErrors);
+
+        if (nextErrors.email || nextErrors.password) {
             return;
         }
 
@@ -316,7 +353,7 @@ export default function Register() {
                 <section className="space-y-4 border-t border-[#edf2f0] pt-6">
                     <SectionHeading step="C">Account Information</SectionHeading>
 
-                    <Field id="email" label="Email Address" error={errors.email} required>
+                    <Field id="email" label="Email Address" error={emailError} required>
                         <div className="relative">
                             <Mail className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-[#6c807c]" aria-hidden="true" />
                             <Input
@@ -326,10 +363,14 @@ export default function Register() {
                                 required
                                 autoComplete="email"
                                 value={data.email}
-                                onChange={(event) => setData('email', event.target.value)}
+                                onChange={(event) => {
+                                    setData('email', event.target.value);
+                                    setClientErrors((previous) => ({ ...previous, email: undefined }));
+                                }}
+                                onBlur={() => setData('email', normalizeEmail(data.email))}
                                 disabled={processing}
-                                aria-invalid={Boolean(errors.email)}
-                                aria-describedby={errors.email ? 'email-error' : undefined}
+                                aria-invalid={Boolean(emailError)}
+                                aria-describedby={emailError ? 'email-error' : undefined}
                                 placeholder="you@university.edu"
                                 className={cn(inputClasses, 'pl-10')}
                             />
@@ -337,7 +378,7 @@ export default function Register() {
                     </Field>
 
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <Field id="password" label="Password" error={passwordError} required>
+                        <Field id="password" label="Password" error={displayedPasswordError} required>
                             <div className="relative">
                                 <LockKeyhole
                                     className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-[#6c807c]"
@@ -350,10 +391,13 @@ export default function Register() {
                                     required
                                     autoComplete="new-password"
                                     value={data.password}
-                                    onChange={(event) => setData('password', event.target.value)}
+                                    onChange={(event) => {
+                                        setData('password', event.target.value);
+                                        setClientErrors((previous) => ({ ...previous, password: undefined }));
+                                    }}
                                     disabled={processing}
-                                    aria-invalid={Boolean(passwordError)}
-                                    aria-describedby={passwordError ? 'password-error' : undefined}
+                                    aria-invalid={Boolean(displayedPasswordError)}
+                                    aria-describedby={displayedPasswordError ? 'password-error' : 'password-requirements'}
                                     placeholder="Create a password"
                                     className={cn(inputClasses, 'pr-11 pl-10')}
                                 />
@@ -404,6 +448,29 @@ export default function Register() {
                                 </button>
                             </div>
                         </Field>
+                    </div>
+
+                    <div id="password-requirements" className="rounded-lg border border-[#e6eeeb] bg-[#f8fbfa] px-3.5 py-3">
+                        <p className="text-[12px] font-medium text-[#294b46]">Your password must include:</p>
+                        <ul className="mt-1.5 grid gap-1 sm:grid-cols-2">
+                            {passwordRequirements.map((requirement) => {
+                                const met = requirement.met(data.password);
+
+                                return (
+                                    <li
+                                        key={requirement.label}
+                                        className={cn('flex items-center gap-1.5 text-[12px]', met ? 'text-[#1c6b5e]' : 'text-[#7a8c88]')}
+                                    >
+                                        {met ? (
+                                            <Check className="size-3.5 shrink-0" aria-hidden="true" />
+                                        ) : (
+                                            <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
+                                        )}
+                                        {requirement.label}
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     </div>
                 </section>
 

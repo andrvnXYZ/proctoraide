@@ -5,18 +5,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
+import { isValidEmail } from '@/lib/validation';
 import { Head, useForm } from '@inertiajs/react';
 import { ArrowLeft, ArrowRight, LoaderCircle } from 'lucide-react';
-import { FormEventHandler } from 'react';
+import { FormEventHandler, useState } from 'react';
 
 interface ForgotPasswordProps {
     status?: string;
 }
 
 export default function ForgotPassword({ status }: ForgotPasswordProps) {
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, transform } = useForm({
         identifier: '',
     });
+
+    const [clientError, setClientError] = useState<string>();
+
+    transform((formData) => ({
+        ...formData,
+        identifier: formData.identifier.trim(),
+    }));
 
     const submit: FormEventHandler = (event) => {
         event.preventDefault();
@@ -25,10 +33,25 @@ export default function ForgotPassword({ status }: ForgotPasswordProps) {
             return;
         }
 
+        // Friendly client-side checks; the server validates the same rules.
+        const identifier = data.identifier.trim();
+
+        if (!identifier) {
+            setClientError('Enter your student ID number or email address.');
+            return;
+        }
+
+        if (identifier.includes('@') && !isValidEmail(identifier)) {
+            setClientError('Enter a complete email address, for example name@example.com.');
+            return;
+        }
+
+        setClientError(undefined);
+
         post(route('password.email'));
     };
 
-    const fieldError = errors.identifier;
+    const fieldError = clientError ?? errors.identifier;
 
     return (
         <AuthLayout showHeader={false}>
@@ -74,7 +97,10 @@ export default function ForgotPassword({ status }: ForgotPasswordProps) {
                         autoFocus
                         autoComplete="username"
                         value={data.identifier}
-                        onChange={(event) => setData('identifier', event.target.value)}
+                        onChange={(event) => {
+                            setData('identifier', event.target.value);
+                            setClientError(undefined);
+                        }}
                         disabled={processing}
                         aria-invalid={Boolean(fieldError)}
                         aria-describedby={fieldError ? 'identifier-error' : undefined}
